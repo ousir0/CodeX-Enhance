@@ -179,6 +179,18 @@ python -m codex_session_delete update
 
 Codex 移动版需要 ChatGPT 登录态和官方远程控制接口。API Key / 中转跳登录模式下无法完整使用，所以增强工具不会强行展示这个入口。
 
+## 交流反馈
+
+欢迎加入 `CodeX 增强用户交流群`，交流安装使用、apikey 配置、功能建议和问题反馈。
+
+添加微信：`duo112311`
+
+备注：`CodeX 增强`
+
+备注后会自动拉群。
+
+![添加微信进入 CodeX 增强用户交流群](assets/readme/wechat-duo112311.jpg)
+
 ## 说明
 
 CodeX 增强只做本机增强注入，不修改 Codex App 安装文件。Codex App 后续更新如果改变页面结构，可能需要同步更新注入脚本。
