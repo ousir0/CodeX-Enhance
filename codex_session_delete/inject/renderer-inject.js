@@ -534,6 +534,22 @@
       .codex-plus-toggle[data-enabled="true"] { background: #10a37f; }
       .codex-plus-toggle[data-enabled="true"] span { transform: translateX(16px); }
       .codex-plus-about { color: var(--codex-plus-muted); font-size: 12px; line-height: 18px; }
+      .codex-plus-about-link {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        margin-top: 8px;
+        color: #0d8f70;
+        font-size: 12px;
+        line-height: 18px;
+        text-decoration: none;
+      }
+      .codex-plus-about-link:hover,
+      .codex-plus-about-link:focus-visible {
+        color: #0b735b;
+        text-decoration: underline;
+        outline: none;
+      }
       .codex-plus-tabs {
         display: flex;
         flex-direction: column;
@@ -974,7 +990,11 @@
               <button type="button" class="codex-plus-toggle" data-codex-backend-setting="providerSyncEnabled"><span></span></button>
             </div>
             <div class="codex-plus-row">
-              <div><div class="codex-plus-row-title">关于 ${codexPlusProductName}</div><div class="codex-plus-about">${codexPlusProductName}（${codexPlusProductSubtitle}）通过外部启动器注入增强能力，不修改 Codex App 原始安装文件。</div></div>
+              <div>
+                <div class="codex-plus-row-title">关于 ${codexPlusProductName}</div>
+                <div class="codex-plus-about">${codexPlusProductName}（${codexPlusProductSubtitle}）通过外部启动器注入增强能力，不修改 Codex App 原始安装文件。</div>
+                <a class="codex-plus-about-link" href="https://github.com/ousir0/CodeX-Enhance" target="_blank" rel="noreferrer">GitHub：ousir0/CodeX-Enhance</a>
+              </div>
             </div>
           </div>
           <div class="codex-plus-panel" data-codex-plus-panel="relay" hidden>

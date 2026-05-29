@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -88,6 +88,8 @@ class CodexPlusRuntime:
     injection_status: str = "starting"
     injection_message: str = "正在等待 Codex 页面…"
     repair_callback: Callable[[], dict[str, object]] | None = None
+    last_bridge_activity: float = field(default_factory=time.monotonic)
+    repair_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def backend_status(self) -> dict[str, object]:
         return {"status": self.injection_status, "message": self.injection_message}
@@ -96,6 +98,9 @@ class CodexPlusRuntime:
         if self.repair_callback is not None:
             return self.repair_callback()
         return self.backend_status()
+
+    def mark_bridge_activity(self) -> None:
+        self.last_bridge_activity = time.monotonic()
 
 
 def backend_settings() -> BackendSettings:
@@ -410,6 +415,15 @@ def shutdown_helper(server: HelperServer) -> None:
     server.server_close()
 
 
+def close_bridge_socket(socket_like: Any) -> None:
+    if not socket_like:
+        return
+    try:
+        socket_like.close()
+    except Exception:
+        pass
+
+
 def inject_with_retry(
     debug_port: int,
     script_path: Path,
@@ -447,6 +461,20 @@ def inject_with_retry(
     raise RuntimeError("Codex injection failed")
 
 
+def start_bridge_watchdog(repair: Callable[[], dict[str, object]], runtime: CodexPlusRuntime, idle_timeout: float = 20.0, interval: float = 8.0) -> None:
+    def watch() -> None:
+        while True:
+            time.sleep(interval)
+            idle_for = time.monotonic() - runtime.last_bridge_activity
+            if idle_for < idle_timeout:
+                continue
+            if runtime.injection_status == "checking":
+                continue
+            repair()
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def launch_and_inject(app_dir: Path | None, db_path: Path | None, backup_dir: Path, debug_port: int, helper_port: int) -> tuple[HelperServer, Any]:
     resolved_app_dir = resolve_codex_app_dir(app_dir)
     if resolved_app_dir is None:
@@ -471,24 +499,28 @@ def launch_and_inject(app_dir: Path | None, db_path: Path | None, backup_dir: Pa
     server = start_helper(service, export_service, port=helper_port, runtime=runtime)
 
     def repair_bridge() -> dict[str, object]:
-        runtime.injection_status = "checking"
-        runtime.injection_message = "正在重连 Codex 增强…"
+        if not runtime.repair_lock.acquire(blocking=False):
+            return runtime.backend_status()
         try:
-            old_socket = server.bridge_socket
-            server.bridge_socket = inject_with_retry(debug_port, script_path, server.port, service, export_service, runtime, attempts=10, delay=0.3)
-            if old_socket and old_socket is not server.bridge_socket:
-                try:
-                    old_socket.close()
-                except Exception:
-                    pass
-            runtime.injection_status = "ok"
-            runtime.injection_message = "后端已连接"
-        except Exception as exc:
-            runtime.injection_status = "failed"
-            runtime.injection_message = f"重连失败：{exc}"
+            runtime.injection_status = "checking"
+            runtime.injection_message = "正在重连 Codex 增强…"
+            try:
+                old_socket = server.bridge_socket
+                server.bridge_socket = inject_with_retry(debug_port, script_path, server.port, service, export_service, runtime, attempts=10, delay=0.3)
+                if old_socket and old_socket is not server.bridge_socket:
+                    close_bridge_socket(old_socket)
+                runtime.mark_bridge_activity()
+                runtime.injection_status = "ok"
+                runtime.injection_message = "后端已连接"
+            except Exception as exc:
+                runtime.injection_status = "failed"
+                runtime.injection_message = f"重连失败：{exc}"
+        finally:
+            runtime.repair_lock.release()
         return runtime.backend_status()
 
     runtime.repair_callback = repair_bridge
+    start_bridge_watchdog(repair_bridge, runtime)
     codex_proc = None
     try:
         codex_proc = launch_codex_app(resolved_app_dir, debug_port)
@@ -527,6 +559,8 @@ def handle_bridge_request(
     payload: dict[str, object],
     runtime: CodexPlusRuntime | None = None,
 ) -> dict[str, object]:
+    if runtime:
+        runtime.mark_bridge_activity()
     if path == "/settings/get" and runtime:
         return SettingsStore().load().to_dict()
     if path == "/settings/set" and runtime:
