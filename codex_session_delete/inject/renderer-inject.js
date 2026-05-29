@@ -817,9 +817,10 @@
     codexPlusBackendStatus = { status: "checking", message: "正在修复后端…" };
     renderBackendStatus();
     try {
-      codexPlusBackendStatus = await httpPostJson("/backend/repair", {});
+      const status = await postJson("/backend/status", {});
+      codexPlusBackendStatus = status?.status === "ok" ? status : await postJson("/backend/repair", {});
     } catch (error) {
-      codexPlusBackendStatus = { status: "failed", message: "后端修复失败" };
+      codexPlusBackendStatus = { status: "failed", message: error?.message || "后端修复失败，请重新启动 CodeX 增强" };
     }
     renderBackendStatus();
   }
@@ -1522,10 +1523,14 @@
       return { status: "failed", message: "桥接不可用，请点击状态重连" };
     }
     try {
-      return await Promise.race([
+      const result = await Promise.race([
         window.__codexSessionDeleteBridge(path, payload),
         new Promise((resolve) => setTimeout(() => resolve({ status: "failed", message: "桥接超时，请点击状态重连" }), 3500)),
       ]);
+      if (path === "/backend/repair" && result?.status === "failed") {
+        return await httpPostJson(path, payload);
+      }
+      return result;
     } catch (error) {
       if (path === "/backend/repair") return httpPostJson(path, payload);
       return { status: "failed", message: error?.message || "桥接请求失败，请点击状态重连" };
